@@ -25,6 +25,9 @@ const int Solenoid1EN = 34;    //  Used to Enable Solenoid 1 for magnetic Hall S
 const int Solenoid2EN = 36;    //  Used to enable Solenoid 2 to push RESET button on DUT
 const int DetSwitch = 38;      //  Used as input to detect presence of the DUT on the test fixture
 const int ServoPin = 8;
+const int LedSensorPin = 6;
+const int MFGModePin = 7;
+const int DUTPowerPin = 9;
 //---Digital Input Line Pin Assignments-----
 
 //---Analog Input Line Pin Assignments-----
@@ -80,12 +83,15 @@ void setup() {
   pinMode(CalLoadEN, OUTPUT);
   pinMode(Solenoid1EN, OUTPUT);
   pinMode(Solenoid2EN, OUTPUT);
+  pinMode(DUTPowerPin, OUTPUT);
+  pinMode(MFGModePin, OUTPUT);
   myservo.attach(ServoPin);
-  myservo.write(105);
+  myservo.write(90);
   //-------------------------------------
   pinMode(DetSwitch, INPUT_PULLUP);
   pinMode(DUTVoltage, INPUT);
   pinMode(DUTCurrent, INPUT);
+  pinMode(LedSensorPin, INPUT);
   //---Initial Conditions----------------      
   digitalWrite(Solenoid1EN, LOW);   // Disable Solenoid 1
   digitalWrite(Solenoid2EN, LOW);   // Disable Solenoid 2
@@ -100,6 +106,8 @@ void setup() {
   digitalWrite(MAXDAPSignalsEN, HIGH);
   digitalWrite(PicMCLRPGM, HIGH);
   digitalWrite(PicMCLRGND, HIGH);
+  digitalWrite(DUTPowerPin, HIGH);
+  digitalWrite(MFGModePin, LOW);
   AvgNumMax = OpAvg;   //  Set Default number of averaging cycles
   Serial.println("Radio Bridge PCB Tester Development Prototype");
   //Calibration();   // Start-up Calibration
@@ -149,39 +157,43 @@ void loop() {
         Serial.println("OK f");        
         break;
      //---------------------------
-      case 'g':                                             //  g ---> Provides energy to solenoid 1 for a specified duration for use in Hall sensor testing or RESET pushbutton actuation
-        Serial.println("Sol.1 Enter ms");
-        
-        while (Serial.available() == 0) {
-        }  
-        Parameter = Serial.parseInt();
-    
-        if (Parameter > 0) {
+      case 'g':                                             //  g ---> Restarts DUT in MFG mode
       //    Serial.print("Duration for Solenoid 1: "); Serial.println(Parameter, DEC);
       //    Serial.println("Sol.1 ON...");
+          digitalWrite(PicMCLRPGM, HIGH);   //Need to Ground MCLR pin otherwise it supplies a 2.6V to the dut
+          digitalWrite(PicMCLRGND, LOW);
+          digitalWrite(TestSerialEN, HIGH);
+          digitalWrite(Solenoid2EN, HIGH);
           digitalWrite(Solenoid1EN, HIGH);
-          delay(Parameter);
+          delay(1500);
       //    Serial.println("Sol.1 OFF...");
+          digitalWrite(Solenoid2EN, LOW);
+          digitalWrite(PicMCLRPGM, LOW);
+          digitalWrite(PicMCLRGND, HIGH);
+          digitalWrite(TestSerialEN, LOW);
+          delay(3000);          
           digitalWrite(Solenoid1EN, LOW);
-        }
-        Serial.println("OK g");
+
+          Serial.println("OK g");
         break;
 
-      case 'h':                                             //  h ---> Provides energy to solenoid 2 for a specified duration for use in Hall sensor testing or RESET pushbutton actuation
-        Serial.println("Sol.2 Enter ms");
+      case 'h':                                             //  h ---> Restarts Device
         
-        while (Serial.available() == 0) {
-        }  
-        Parameter = Serial.parseInt();
-    
-        if (Parameter > 0) {
+        digitalWrite(PicMCLRPGM, HIGH);   //Need to Ground MCLR pin otherwise it supplies a 2.6V to the dut
+        digitalWrite(PicMCLRGND, LOW);
+        digitalWrite(TestSerialEN, HIGH);
+        digitalWrite(PICSignalsEN, HIGH);
        //   Serial.print("Duration for Solenoid 2: "); Serial.println(Parameter, DEC);
        //   Serial.println("Sol.2 ON...");
-          digitalWrite(Solenoid2EN, HIGH);
-          delay(Parameter);
-       //   Serial.println("Sol.2 OFF...");
-          digitalWrite(Solenoid2EN, LOW);
-        }
+        digitalWrite(Solenoid2EN, HIGH);
+        delay(1500);
+        //   Serial.println("Sol.2 OFF...");
+        digitalWrite(Solenoid2EN, LOW);
+        
+        digitalWrite(PicMCLRPGM, LOW);
+        digitalWrite(PicMCLRGND, HIGH);
+        digitalWrite(TestSerialEN, LOW);
+        digitalWrite(PICSignalsEN, LOW);
         Serial.println("OK h");
         break;
 
@@ -303,6 +315,12 @@ void loop() {
         break;
       case '1':
         TamperSwitchPushTest();
+        break;
+      case '2':
+        LedTest();
+        break;
+      case '3':
+        ServoCalibration();
         break;
       default:                                              //  Warns of entry of a command character not in the above list
         Serial.println("Invalid Command");
@@ -499,7 +517,7 @@ void ADCReadMaxCurrent()
   long startMillis = millis();
   int counter = 0;
 
-  while ( millis() - startMillis < 2000 )   // Was 1000 earlier
+  while ( millis() - startMillis < 5000 )   // Was 1000 earlier
   {
     voltage = ADS.readADC_Differential_0_1() * 400 ;
     ampere  = voltage * CurrentGainFactor ;
@@ -518,7 +536,36 @@ void ADCReadMaxCurrent()
 
 void TamperSwitchPushTest()
 {
-  myservo.write(55);
+  myservo.write(60);
+
+
   delay(500);
-  myservo.write(105);
+  myservo.write(90);
+}
+
+void LedTest() {
+
+    int value = digitalRead(LedSensorPin); // Read the digital input
+    Serial.println(value);          // Print the value to Serial Monitor in a readable format
+
+}
+
+void ServoCalibration()
+{
+  Serial.println("Beginning servo calibration...");
+  myservo.write(0);
+  delay(1000);
+  Serial.println("Servo at 0 point. Load rack and continuously apply some force/pressure. Once ready, type 'r' while still applying pressure.");
+  while(Serial.available() == 0){}
+  String input = Serial.readStringUntil('\n');
+  input.trim();
+  if(input == "r"){
+    myservo.write(90);
+    delay(1000);
+    Serial.println("Servo calibrated.");
+  }
+  else{
+    Serial.println("Invalid character(s) typed, try function again.");
+  }
+
 }
